@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "113590355436",
+    "project_id": "maa-pyaar",
+    "storage_bucket": "maa-pyaar.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:113590355436:android:97f23a5f5fc32e9b68acc9",
+        "android_client_info": {
+          "package_name": "com.frontend"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyByb7yfiezCleF9Hcjo6R7QGqh5djR2PzU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

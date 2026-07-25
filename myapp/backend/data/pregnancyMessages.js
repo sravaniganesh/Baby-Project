@@ -1,0 +1,22 @@
+module.exports = {
+1: "Hi Mom 🤰 I’m just getting started! My brain and spinal cord are forming.",
+2: "Hi Mom ❤️ I’m growing fast this week. My heart has started beating!",
+3: "Mommy 💕 I’m about the size of a sesame seed.",
+4: "Hi Mom! My tiny arms and legs are beginning to form.",
+5: "Hi Mom 🤰 I'm now the size of an apple seed!",
+6: "Mommy ❤️ My brain is developing rapidly this week.",
+7: "Hi Mom! My tiny hands and feet are starting to form.",
+8: "Hi Mom 🤰 I’m about the size of a raspberry today!",
+9: "Mom ❤️ I can now move a little inside your belly.",
+10: "Hi Mom! My bones are starting to form.",
+11: "Hi Mom ❤️ I’m now about the size of a fig.",
+12: "Mommy 🤰 My fingers and toes are separating!",
+13: "Hi Mom! I’m almost fully formed and growing quickly.",
+14: "Hi Mom ❤️ Welcome to the second trimester!",
+20: "Hi Mom 🤰 I can now hear your voice.",
+24: "Mom ❤️ My lungs are developing every day.",
+28: "Hi Mom 🤰 Welcome to the third trimester!",
+32: "Hi Mom! I’m practicing breathing movements.",
+36: "Mommy ❤️ I’m getting ready to meet you soon.",
+40: "Hi Mom 🤰 I’m ready to meet you!"
+};
