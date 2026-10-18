@@ -242,11 +242,11 @@ mainCategory: {
     ====================== */
 
     approvalStatus: {
-      type: String,
-      enum: ["PENDING", "APPROVED", "REJECTED"],
-      default: "PENDING",
-      index: true,
-    },
+  type: String,
+  enum: ["PENDING", "CHANGES_REQUIRED", "APPROVED", "REJECTED"],
+  default: "PENDING",
+  index: true,
+},
 
     approvedBy: {
       type: mongoose.Schema.Types.ObjectId,
@@ -263,6 +263,14 @@ mainCategory: {
       type: String,
       default: "",
     },
+    changeRequestReason: { type: String, default: "" },
+changeRequestMessage: { type: String, default: "" },
+changeRequestedAt: { type: Date, default: null },
+changeRequestedBy: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: "Admin",
+  default: null,
+},
 
     isActive: {
       type: Boolean,

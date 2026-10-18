@@ -84,6 +84,7 @@ const SellerAddProductScreen = ({ navigation }: any) => {
 
   useEffect(() => {
     if (!allowedPolicies) return;
+
     setReturnable(allowedPolicies.returnable);
     setReplaceable(allowedPolicies.replaceable);
     setExchangeable(allowedPolicies.exchangeable);
@@ -100,31 +101,50 @@ const SellerAddProductScreen = ({ navigation }: any) => {
 
   const openGallery = () =>
     launchImageLibrary({ mediaType: "photo", quality: 0.7 }, handleImage);
+
   const openCamera = () =>
     launchCamera({ mediaType: "photo", quality: 0.7 }, handleImage);
 
   const handleImage = async (res: any) => {
     if (!res.assets?.[0]) return;
+
     try {
       setUploading(true);
+
       const token = await AsyncStorage.getItem("token");
 
       const form = new FormData();
+
       form.append("image", {
         uri: res.assets[0].uri,
         name: "product.jpg",
         type: "image/jpeg",
       } as any);
 
-     const upload = await API.post(
-  "/seller/products/upload-image",
-  form,
-  { headers: { Authorization: `Bearer ${token}` } }
-);
+      const upload = await API.post(
+        "/seller/products/upload-image",
+        form,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "multipart/form-data",
+          },
+        }
+      );
 
       setImages(prev => [...prev, upload.data.imageUrl]);
-    } catch {
-      Alert.alert("Image upload failed");
+    } catch (error: any) {
+      console.log("IMAGE UPLOAD ERROR:", error);
+      console.log("IMAGE UPLOAD RESPONSE:", error?.response?.data);
+      console.log("IMAGE UPLOAD STATUS:", error?.response?.status);
+      console.log("IMAGE UPLOAD MESSAGE:", error?.message);
+
+      Alert.alert(
+        "Image upload failed",
+        error?.response?.data?.message ||
+          error?.message ||
+          "Unknown upload error"
+      );
     } finally {
       setUploading(false);
     }
@@ -134,6 +154,14 @@ const SellerAddProductScreen = ({ navigation }: any) => {
   const submitProduct = async () => {
     if (!mainCategory || !categoryKey || !productType) {
       Alert.alert("Complete category selection");
+      return;
+    }
+
+    if (images.length === 0) {
+      Alert.alert(
+        "Product Image Required",
+        "Please add at least one product image."
+      );
       return;
     }
 
@@ -153,14 +181,23 @@ const SellerAddProductScreen = ({ navigation }: any) => {
     try {
       const token = await AsyncStorage.getItem("token");
 
-await API.post(
-  "/seller/products",
+      await API.post(
+        "/seller/products",
         {
           title: productType,
+          description,
+
+          // Required product fields
+          mainCategory,
+          category: categoryKey,
+          productType,
+
           mrp: Number(mrp),
-          price: Number(sellingPrice), // delivery added later by platform
+          price: Number(sellingPrice),
           stock: inStock ? Number(stockQty) : 0,
           images,
+
+          // Keep existing attribute structure
           attributes: {
             mainCategory,
             category: categoryKey,
@@ -174,6 +211,15 @@ await API.post(
             hsn,
             sku,
           },
+
+          // Required delivery structure
+          delivery: {
+            channel: deliveryChannel,
+            charge: 0,
+            weightInGrams,
+          },
+
+          // Keep existing policy structure
           policies: {
             returnable,
             replaceable,
@@ -182,14 +228,31 @@ await API.post(
               "For replacement/exchange, delivery charges will be applied as per selected delivery channel",
           },
         },
-        { headers: { Authorization: `Bearer ${token}` } }
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
       );
 
-      Alert.alert("Success", "Product added successfully", [
-        { text: "OK", onPress: () => navigation.goBack() },
-      ]);
-    } catch {
-      Alert.alert("Failed to add product");
+      Alert.alert(
+        "Product Submitted",
+        "Your product has been submitted for admin approval.",
+        [
+          {
+            text: "OK",
+            onPress: () => navigation.goBack(),
+          },
+        ]
+      );
+    } catch (error: any) {
+      console.log(
+        "ADD PRODUCT ERROR:",
+        error?.response?.data || error?.message || error
+      );
+
+      Alert.alert(
+        "Failed to add product",
+        error?.response?.data?.message || "Please try again."
+      );
     }
   };
 
@@ -198,19 +261,6 @@ await API.post(
     <ScrollView style={styles.container}>
       <Text style={styles.title}>Add New Product</Text>
 
-      {/* IMAGES */}
-      <View style={styles.card}>
-        <Text style={styles.section}>Product Images</Text>
-        <TouchableOpacity style={styles.imageBox} onPress={pickImage}>
-          {uploading ? <ActivityIndicator /> : <Text>+ Add Image</Text>}
-        </TouchableOpacity>
-        <View style={styles.imageRow}>
-          {images.map((img, i) => (
-            <Image key={i} source={{ uri: img }} style={styles.image} />
-          ))}
-        </View>
-      </View>
-
       {/* CATEGORY */}
       <View style={styles.card}>
         <Text style={styles.section}>Category</Text>
@@ -218,14 +268,25 @@ await API.post(
         {Object.keys(CATEGORY_MASTER).map(key => (
           <TouchableOpacity
             key={key}
-            style={[styles.option, mainCategory === key && styles.selected]}
+            style={[
+              styles.option,
+              mainCategory === key && styles.selected,
+            ]}
             onPress={() => {
               setMainCategory(key);
               setCategoryKey(null);
               setProductType(null);
+              setImages([]);
             }}
           >
-            <Text>{CATEGORY_MASTER[key].label}</Text>
+            <Text
+              style={[
+                styles.optionText,
+                mainCategory === key && styles.selectedOptionText,
+              ]}
+            >
+              {CATEGORY_MASTER[key].label}
+            </Text>
           </TouchableOpacity>
         ))}
 
@@ -235,7 +296,7 @@ await API.post(
               style={styles.dropdown}
               onPress={() => setShowSubCat(!showSubCat)}
             >
-              <Text>
+              <Text style={styles.dropdownText}>
                 {categoryKey
                   ? CATEGORY_MASTER[mainCategory].categories[categoryKey].label
                   : "Select Sub Category"}
@@ -252,10 +313,11 @@ await API.post(
                   onPress={() => {
                     setCategoryKey(key);
                     setProductType(null);
+                    setImages([]);
                     setShowSubCat(false);
                   }}
                 >
-                  <Text>
+                  <Text style={styles.dropdownItemText}>
                     {CATEGORY_MASTER[mainCategory].categories[key].label}
                   </Text>
                 </TouchableOpacity>
@@ -269,7 +331,9 @@ await API.post(
               style={styles.dropdown}
               onPress={() => setShowProducts(!showProducts)}
             >
-              <Text>{productType || "Select Product Type"}</Text>
+              <Text style={styles.dropdownText}>
+                {productType || "Select Product Type"}
+              </Text>
             </TouchableOpacity>
 
             {showProducts &&
@@ -284,26 +348,117 @@ await API.post(
                     setShowProducts(false);
                   }}
                 >
-                  <Text>{p}</Text>
+                  <Text style={styles.dropdownItemText}>{p}</Text>
                 </TouchableOpacity>
               ))}
           </>
         )}
       </View>
 
+      {/* IMAGES */}
+      {productType && (
+        <View style={styles.imageCard}>
+          <View style={styles.imageHeader}>
+            <View>
+              <Text style={styles.imageTitle}>Product Images</Text>
+              <Text style={styles.imageSubtitle}>
+                Add clear photos of your product
+              </Text>
+            </View>
+
+            <View style={styles.imageCountBadge}>
+              <Text style={styles.imageCountText}>
+                {images.length} {images.length === 1 ? "Image" : "Images"}
+              </Text>
+            </View>
+          </View>
+
+          <TouchableOpacity
+            style={styles.imageUploadBox}
+            onPress={pickImage}
+            activeOpacity={0.8}
+          >
+            {uploading ? (
+              <>
+                <ActivityIndicator size="large" />
+                <Text style={styles.uploadingText}>
+                  Uploading image...
+                </Text>
+              </>
+            ) : (
+              <>
+                <View style={styles.uploadIconCircle}>
+                  <Text style={styles.uploadIcon}>+</Text>
+                </View>
+
+                <Text style={styles.uploadTitle}>
+                  Add Product Image
+                </Text>
+
+                <Text style={styles.uploadSubtitle}>
+                  Camera or Gallery
+                </Text>
+              </>
+            )}
+          </TouchableOpacity>
+
+          {images.length > 0 && (
+            <View style={styles.previewContainer}>
+              <Text style={styles.previewTitle}>Uploaded Images</Text>
+
+              <View style={styles.imageRow}>
+                {images.map((img, i) => (
+                  <View key={i} style={styles.imagePreviewWrapper}>
+                    <Image
+                      source={{ uri: img }}
+                      style={styles.image}
+                    />
+
+                    {i === 0 && (
+                      <View style={styles.mainImageBadge}>
+                        <Text style={styles.mainImageText}>Main</Text>
+                      </View>
+                    )}
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
+
+          <Text style={styles.imageHint}>
+            Use clear, well-lit product photos. At least one image is required.
+          </Text>
+        </View>
+      )}
+
       {/* PRICING */}
       {productType && (
         <>
           <View style={styles.card}>
             <Text style={styles.section}>Pricing</Text>
-            <TextInput style={styles.input} placeholder="MRP" value={mrp} onChangeText={setMrp} />
-            <TextInput style={styles.input} placeholder="Selling Price" value={sellingPrice} onChangeText={setSellingPrice} />
+
+            <TextInput
+              style={styles.input}
+              placeholder="MRP"
+              value={mrp}
+              onChangeText={setMrp}
+            />
+
+            <TextInput
+              style={styles.input}
+              placeholder="Selling Price"
+              value={sellingPrice}
+              onChangeText={setSellingPrice}
+            />
           </View>
 
           <View style={styles.card}>
             <Text style={styles.section}>Inventory & Weight</Text>
+
             <TouchableOpacity onPress={() => setInStock(!inStock)}>
-              <Text>{inStock ? "In Stock" : "Out of Stock"}</Text>
+              <Text>
+                {inStock ? "In Stock" : "Out of Stock"}
+              </Text>
             </TouchableOpacity>
 
             {inStock && (
@@ -331,7 +486,9 @@ await API.post(
                     styles.unitBtn,
                     weightUnit === u.key && styles.selected,
                   ]}
-                  onPress={() => setWeightUnit(u.key as "g" | "kg")}
+                  onPress={() =>
+                    setWeightUnit(u.key as "g" | "kg")
+                  }
                 >
                   <Text>{u.label}</Text>
                 </TouchableOpacity>
@@ -341,6 +498,7 @@ await API.post(
 
           <View style={styles.card}>
             <Text style={styles.section}>Delivery Channel</Text>
+
             {DELIVERY_CHANNELS.map(c => (
               <TouchableOpacity
                 key={c.key}
@@ -353,21 +511,40 @@ await API.post(
                 <Text>{c.label}</Text>
               </TouchableOpacity>
             ))}
-            <Text style={{ fontSize: 12, marginTop: 6, color: "#555" }}>
+
+            <Text
+              style={{
+                fontSize: 12,
+                marginTop: 6,
+                color: "#555",
+              }}
+            >
               Note: Delivery charges for replacement/exchange will apply as per
               selected delivery channel.
             </Text>
           </View>
 
           <View style={styles.card}>
-            <Text style={styles.section}>Return / Replacement Policy</Text>
-            <Text>Return: {returnable ? "Allowed" : "Not Allowed"}</Text>
-            <Text>Replacement: {replaceable ? "Allowed" : "Not Allowed"}</Text>
-            <Text>Exchange: {exchangeable ? "Allowed" : "Not Allowed"}</Text>
+            <Text style={styles.section}>
+              Return / Replacement Policy
+            </Text>
+
+            <Text>
+              Return: {returnable ? "Allowed" : "Not Allowed"}
+            </Text>
+
+            <Text>
+              Replacement: {replaceable ? "Allowed" : "Not Allowed"}
+            </Text>
+
+            <Text>
+              Exchange: {exchangeable ? "Allowed" : "Not Allowed"}
+            </Text>
           </View>
 
           <View style={styles.card}>
             <Text style={styles.section}>Product Details</Text>
+
             {selectedAttributes.map(a => (
               <TextInput
                 key={a}
@@ -375,10 +552,14 @@ await API.post(
                 placeholder={a}
                 value={attributes[a] || ""}
                 onChangeText={v =>
-                  setAttributes(prev => ({ ...prev, [a]: v }))
+                  setAttributes(prev => ({
+                    ...prev,
+                    [a]: v,
+                  }))
                 }
               />
             ))}
+
             <TextInput
               style={[styles.input, { height: 80 }]}
               placeholder="Product Description"
@@ -388,8 +569,13 @@ await API.post(
             />
           </View>
 
-          <TouchableOpacity style={styles.submit} onPress={submitProduct}>
-            <Text style={styles.submitText}>Submit Product</Text>
+          <TouchableOpacity
+            style={styles.submit}
+            onPress={submitProduct}
+          >
+            <Text style={styles.submitText}>
+              Submit Product
+            </Text>
           </TouchableOpacity>
         </>
       )}
@@ -401,49 +587,94 @@ export default SellerAddProductScreen;
 
 /* ================= STYLES ================= */
 const styles = StyleSheet.create({
-  container: { padding: 16 },
-  title: { fontSize: 20, fontWeight: "bold", marginBottom: 10 },
+  container: {
+    padding: 16,
+    backgroundColor: "#F6F8FC",
+  },
+
+  title: {
+    fontSize: 22,
+    fontWeight: "bold",
+    marginBottom: 14,
+    color: "#111827",
+  },
 
   card: {
     backgroundColor: "#fff",
-    padding: 12,
-    borderRadius: 12,
+    padding: 14,
+    borderRadius: 14,
     marginBottom: 12,
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 5,
+    shadowOffset: { width: 0, height: 2 },
   },
 
-  section: { fontWeight: "bold", marginBottom: 8 },
+  section: {
+    fontWeight: "bold",
+    fontSize: 16,
+    marginBottom: 8,
+    color: "#111827",
+  },
 
   option: {
-    padding: 10,
+    padding: 12,
     borderWidth: 1,
-    borderRadius: 8,
-    marginTop: 6,
-    borderColor: "#ccc",
+    borderRadius: 10,
+    marginTop: 7,
+    borderColor: "#D1D5DB",
+    backgroundColor: "#FFFFFF",
   },
+
+  optionText: {
+    fontSize: 14,
+    color: "#374151",
+  },
+
   selected: {
     backgroundColor: "#DBEAFE",
     borderColor: "#2563EB",
   },
 
-  dropdown: {
-    padding: 12,
-    borderWidth: 1,
-    borderRadius: 8,
-    marginTop: 8,
-    backgroundColor: "#F9FAFB",
+  selectedOptionText: {
+    color: "#1D4ED8",
+    fontWeight: "600",
   },
+
+  dropdown: {
+    padding: 13,
+    borderWidth: 1,
+    borderRadius: 10,
+    marginTop: 10,
+    backgroundColor: "#F9FAFB",
+    borderColor: "#D1D5DB",
+  },
+
+  dropdownText: {
+    color: "#374151",
+    fontSize: 14,
+  },
+
   dropdownItem: {
-    padding: 10,
+    padding: 12,
     borderBottomWidth: 1,
     borderColor: "#E5E7EB",
+    backgroundColor: "#FAFAFA",
+  },
+
+  dropdownItemText: {
+    color: "#374151",
+    fontSize: 14,
   },
 
   input: {
     borderWidth: 1,
-    borderRadius: 8,
-    padding: 10,
+    borderRadius: 9,
+    padding: 11,
     marginTop: 8,
-    borderColor: "#ccc",
+    borderColor: "#D1D5DB",
+    backgroundColor: "#FFFFFF",
   },
 
   unitBtn: {
@@ -456,23 +687,166 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
 
-  imageBox: {
-    height: 100,
+  /* ================= IMAGE SECTION ================= */
+
+  imageCard: {
+    backgroundColor: "#FFFFFF",
+    padding: 16,
+    borderRadius: 16,
+    marginBottom: 12,
+    elevation: 3,
+    shadowColor: "#000",
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
     borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+
+  imageHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 14,
+  },
+
+  imageTitle: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: "#111827",
+  },
+
+  imageSubtitle: {
+    fontSize: 12,
+    color: "#6B7280",
+    marginTop: 3,
+  },
+
+  imageCountBadge: {
+    backgroundColor: "#EFF6FF",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+
+  imageCountText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#2563EB",
+  },
+
+  imageUploadBox: {
+    height: 145,
+    borderWidth: 1.5,
     borderStyle: "dashed",
-    borderRadius: 10,
+    borderColor: "#60A5FA",
+    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: "#F8FBFF",
   },
-  imageRow: { flexDirection: "row", flexWrap: "wrap", marginTop: 8 },
-  image: { width: 70, height: 70, borderRadius: 8, marginRight: 8 },
+
+  uploadIconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#DBEAFE",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 7,
+  },
+
+  uploadIcon: {
+    fontSize: 28,
+    color: "#2563EB",
+    fontWeight: "300",
+    marginTop: -2,
+  },
+
+  uploadTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#1D4ED8",
+  },
+
+  uploadSubtitle: {
+    fontSize: 12,
+    color: "#6B7280",
+    marginTop: 3,
+  },
+
+  uploadingText: {
+    marginTop: 8,
+    fontSize: 12,
+    color: "#6B7280",
+  },
+
+  previewContainer: {
+    marginTop: 16,
+  },
+
+  previewTitle: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#374151",
+    marginBottom: 8,
+  },
+
+  imageRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    marginTop: 2,
+  },
+
+  imagePreviewWrapper: {
+    position: "relative",
+    marginRight: 9,
+    marginBottom: 9,
+  },
+
+  image: {
+    width: 78,
+    height: 78,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+
+  mainImageBadge: {
+    position: "absolute",
+    bottom: 4,
+    left: 4,
+    backgroundColor: "#111827",
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 5,
+  },
+
+  mainImageText: {
+    color: "#FFFFFF",
+    fontSize: 9,
+    fontWeight: "600",
+  },
+
+  imageHint: {
+    fontSize: 11,
+    color: "#6B7280",
+    marginTop: 5,
+    lineHeight: 16,
+  },
 
   submit: {
     backgroundColor: "#0A7AFF",
-    padding: 14,
-    borderRadius: 10,
+    padding: 15,
+    borderRadius: 12,
     marginVertical: 20,
     alignItems: "center",
+    elevation: 2,
   },
-  submitText: { color: "#fff", fontWeight: "bold" },
+
+  submitText: {
+    color: "#fff",
+    fontWeight: "bold",
+    fontSize: 15,
+  },
 });
