@@ -1,112 +1,170 @@
+
 const mongoose = require("mongoose");
 
 const consultationSchema = new mongoose.Schema(
-{
-  userId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "User",
-    required: true,
-  },
+  {
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
 
-  doctorId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "Doctor",
-    required: true,
-  },
+    doctorId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Doctor",
+      required: true,
+    },
 
- consultationType: {
-  type: String,
-  enum: ["video", "hospital"], // ✅ ADD hospital
-  required: true,
-},
+    hospitalId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Hospital",
+      default: null,
+    },
 
-  status: {
-    type: String,
-    enum: [
-      "REQUESTED",
-      "CONFIRMED",
-      "IN_PROGRESS",
-      "COMPLETED",
-      "CANCELLED",
-      "REJECTED",
+    consultationType: {
+      type: String,
+      enum: ["video", "hospital"],
+      required: true,
+    },
+
+    status: {
+      type: String,
+      enum: [
+        "REQUESTED",
+        "SLOT_PROPOSED",
+        "AWAITING_PAYMENT",
+        "CONFIRMED",
+        "IN_PROGRESS",
+        "COMPLETED",
+        "CANCELLED",
+        "REJECTED",
+      ],
+      default: "REQUESTED",
+    },
+
+    // User's preferred date for a flexible hospital consultation request.
+    preferredDate: {
+      type: Date,
+      default: null,
+    },
+
+    // Confirmed appointment date and time.
+    scheduledAt: {
+      type: Date,
+      default: null,
+    },
+
+    slotTime: {
+      type: String,
+      default: null,
+    },
+
+    // Multiple available appointment slots proposed by the doctor
+    // or an authorized assistant.
+    proposedSlots: [
+      {
+        _id: false,
+
+        scheduledAt: {
+          type: Date,
+          required: true,
+        },
+
+        slotTime: {
+          type: String,
+          required: true,
+        },
+      },
     ],
-    default: "REQUESTED",
-  },
 
-  /* ===============================
-     SCHEDULING
-  =============================== */
+    // Retained for compatibility with existing single-slot workflows.
+    proposedAt: {
+      type: Date,
+      default: null,
+    },
 
-  scheduledAt: {
-    type: Date,
-  },
+    proposedBy: {
+      type: String,
+      enum: ["doctor", "assistant"],
+      default: null,
+    },
 
-  slotTime: {
-    type: String,
-    required: true,
-  },
+    // Pricing and earnings.
+    consultationFee: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
 
-  /* ===============================
-     FINANCIALS
-  =============================== */
+    doctorEarning: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
 
-  consultationFee: {
-    type: Number,
-    default: 0,
-  },
+    platformFee: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
 
-  doctorEarning: {
-    type: Number,
-    default: 0,
-  },
+    // Payment information.
+    paymentStatus: {
+      type: String,
+      enum: ["PENDING", "PAID", "FREE", "REFUNDED"],
+      default: "PENDING",
+    },
 
-  platformFee: {
-    type: Number,
-    default: 0,
-  },
-
- paymentStatus: {
+   paymentMethod: {
   type: String,
-  enum: ["PENDING", "PAID", "FREE"], // ✅ ADD FREE
-  default: "PENDING",
+  enum: ["WALLET", "PAY_AT_HOSPITAL", "DEMO_ONLINE"],
+  default: null,
 },
 
-  paymentReference: {
-    type: String,
-    default: "",
+    paymentReference: {
+      type: String,
+      default: null,
+    },
+
+    // Video chat is linked only after successful payment.
+    chatId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Chat",
+      default: null,
+    },
+
+    settlementId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "DoctorSettlement",
+      default: null,
+    },
+
+    meetingLink: {
+      type: String,
+      default: null,
+    },
+
+    doctorNotes: {
+      type: String,
+      default: "",
+    },
+
+    prescription: {
+      type: String,
+      default: "",
+    },
   },
-
-  /* ===============================
-     SETTLEMENT LINK
-  =============================== */
-
-  settlementId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "DoctorSettlement",
-    default: null,
-  },
-
-  /* ===============================
-     CONSULTATION DETAILS
-  =============================== */
-
-  meetingLink: {
-    type: String,
-    default: null,
-  },
-
-  doctorNotes: {
-    type: String,
-    default: "",
-  },
-
-  prescription: {
-    type: String,
-    default: "",
-  },
-},
-{ timestamps: true }
+  { timestamps: true }
 );
+
+// Preserve the existing slot lookup index.
+consultationSchema.index({
+  doctorId: 1,
+  hospitalId: 1,
+  scheduledAt: 1,
+  slotTime: 1,
+  status: 1,
+});
 
 module.exports = mongoose.model(
   "Consultation",

@@ -1,3 +1,4 @@
+
 import React from "react";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
@@ -6,6 +7,8 @@ import DoctorChatScreen from "../screens/doctor/DoctorChatScreen";
 import DoctorProfileScreen from "../screens/doctor/DoctorProfileScreen";
 import DoctorConsultationsScreen from "../screens/doctor/DoctorConsultationsScreen";
 import DoctorPricingScreen from "../screens/doctor/DoctorPricingScreen";
+import DoctorHospitalEnrollmentScreen from "../screens/doctor/DoctorHospitalEnrollmentScreen";
+import DoctorAssistantManagementScreen from "../screens/doctor/DoctorAssistantManagementScreen";
 
 export type DoctorStackParamList = {
   DoctorHome: undefined;
@@ -13,10 +16,11 @@ export type DoctorStackParamList = {
     chatId: string;
     userName: string;
   };
- 
   DoctorProfile: undefined;
   DoctorConsultations: undefined;
   DoctorPricing: undefined;
+  DoctorHospitalEnrollment: undefined;
+  DoctorAssistantManagement: undefined;
 };
 
 const Stack = createNativeStackNavigator<DoctorStackParamList>();
@@ -41,20 +45,32 @@ const DoctorStack = () => {
       <Stack.Screen
         name="DoctorProfile"
         component={DoctorProfileScreen}
-        options={{ title: "MyProfile" }}
+        options={{ title: "My Profile" }}
       />
+
       <Stack.Screen
-  name="DoctorPricing"
-  component={DoctorPricingScreen}
-  options={{ title: "Pricing Settings" }}
-/>
+        name="DoctorPricing"
+        component={DoctorPricingScreen}
+        options={{ title: "Pricing Settings" }}
+      />
+
       <Stack.Screen
-  name="DoctorConsultations"
-  component={DoctorConsultationsScreen}
-  options={{ title: "Consultations" }}
-/>
-  
-      
+        name="DoctorConsultations"
+        component={DoctorConsultationsScreen}
+        options={{ title: "Consultations" }}
+      />
+
+      <Stack.Screen
+        name="DoctorHospitalEnrollment"
+        component={DoctorHospitalEnrollmentScreen}
+        options={{ title: "My Hospitals" }}
+      />
+
+      <Stack.Screen
+        name="DoctorAssistantManagement"
+        component={DoctorAssistantManagementScreen}
+        options={{ title: "Manage Assistants" }}
+      />
     </Stack.Navigator>
   );
 };

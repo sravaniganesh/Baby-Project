@@ -1,3 +1,4 @@
+
 import React, { useCallback, useState } from "react";
 import {
   View,
@@ -6,83 +7,168 @@ import {
   StyleSheet,
   ActivityIndicator,
   TouchableOpacity,
-  Alert,
 } from "react-native";
 import API from "../../config/api";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
-import Icon from "react-native-vector-icons/Ionicons";
 
+type OrderItem = {
+  orderItemId: string;
+  productId: string;
+  title: string;
+  sellerId: string;
+  price: number;
+  quantity: number;
+  status: string;
+};
 
+type Order = {
+  orderId: string;
+  items: OrderItem[];
+  paymentStatus?: string;
+  paymentMethod?: string;
+  paymentReference?: string | null;
+  paidAt?: string | null;
+  orderTotal?: number;
+  itemsSubtotal?: number;
+  discountAmount?: number;
+  customerDeliveryCharge?: number;
+  platformFee?: number;
+  createdAt: string;
+};
 
 const UserOrdersScreen = () => {
   const navigation = useNavigation<any>();
 
-  const [orders, setOrders] = useState<any[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] =
     useState<"ALL" | "ACTIVE" | "CANCELLED">("ALL");
 
-  /* ================= STATUS HELPERS ================= */
-
-  const getStatusStyle = (status: string) => {
-    switch (status) {
-      case "PLACED":
-        return styles.statusPlaced;
-      case "SHIPPED":
-        return styles.statusShipped;
-      case "CANCELLED":
-        return styles.statusCancelled;
-      default:
-        return styles.statusDefault;
-    }
-  };
-
-  const getStatusText = (status: string) => {
-    switch (status) {
-      case "PLACED":
-        return "Order Placed";
-      case "SHIPPED":
-        return "Shipped";
-      case "CANCELLED":
-        return "Cancelled";
-      default:
-        return status;
-    }
-  };
-
-  const formatOrderDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString("en-IN", {
+  const formatDate = (dateString: string) =>
+    new Date(dateString).toLocaleDateString("en-IN", {
       day: "2-digit",
       month: "short",
       year: "numeric",
     });
-  };
 
-  const formatOrderTime = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleTimeString("en-IN", {
+  const formatTime = (dateString: string) =>
+    new Date(dateString).toLocaleTimeString("en-IN", {
       hour: "2-digit",
       minute: "2-digit",
     });
+
+  const getPaymentLabel = (status?: string) => {
+    switch (status) {
+      case "SUCCESS":
+        return "Payment Successful";
+      case "PENDING":
+        return "Payment Pending";
+      case "FAILED":
+        return "Payment Failed";
+      case "CANCELLED":
+        return "Payment Cancelled";
+      case "REFUNDED":
+        return "Refunded";
+      default:
+        return "Payment Not Available";
+    }
   };
 
-  /* ================= API ================= */
+  const getPaymentStyle = (status?: string) => {
+    switch (status) {
+      case "SUCCESS":
+        return styles.paymentSuccess;
+      case "PENDING":
+        return styles.paymentPending;
+      case "FAILED":
+      case "CANCELLED":
+        return styles.paymentFailed;
+      default:
+        return styles.paymentDefault;
+    }
+  };
+
+  const getOrderStatus = (items: OrderItem[]) => {
+    if (items.length > 0 && items.every(item => item.status === "CANCELLED")) {
+      return "CANCELLED";
+    }
+
+    if (items.some(item => item.status === "SHIPPED")) {
+      return "SHIPPED";
+    }
+
+    if (items.some(item => item.status === "ACCEPTED")) {
+      return "ACCEPTED";
+    }
+
+    if (items.some(item => item.status === "PLACED")) {
+      return "PLACED";
+    }
+
+    if (items.every(item => item.status === "DELIVERED")) {
+      return "DELIVERED";
+    }
+
+    return items[0]?.status || "UNKNOWN";
+  };
 
   const loadOrders = async () => {
     try {
       const token = await AsyncStorage.getItem("token");
+
       if (!token) {
-        setLoading(false);
+        setOrders([]);
         return;
       }
 
-      const res = await API.get('/orders/my', {
+      const res = await API.get("/orders/my", {
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      setOrders(res.data || []);
+      const orderItems = res.data || [];
+
+      // Group individual products under their parent checkout order.
+      const grouped: Record<string, Order> = {};
+
+      orderItems.forEach((item: any) => {
+        const key = item.orderId || item.orderItemId;
+
+        if (!grouped[key]) {
+          grouped[key] = {
+            orderId: key,
+            items: [],
+            paymentStatus: item.paymentStatus,
+            paymentMethod: item.paymentMethod,
+            paymentReference: item.paymentReference,
+            paidAt: item.paidAt,
+            orderTotal: item.orderTotal,
+            itemsSubtotal: item.itemsSubtotal,
+            discountAmount: item.discountAmount,
+            customerDeliveryCharge: item.customerDeliveryCharge,
+            platformFee: item.platformFee,
+            createdAt: item.createdAt,
+          };
+        }
+
+        grouped[key].items.push({
+          orderItemId: item.orderItemId,
+          productId: item.productId,
+          title: item.title,
+          sellerId: item.sellerId,
+          price: item.price,
+          quantity: item.quantity,
+          status: item.status,
+        });
+      });
+
+      const groupedOrders = Object.values(grouped).sort(
+        (a, b) =>
+          new Date(b.createdAt).getTime() -
+          new Date(a.createdAt).getTime()
+      );
+
+      setOrders(groupedOrders);
     } catch (err) {
       console.error("Load user orders error:", err);
     } finally {
@@ -97,116 +183,106 @@ const UserOrdersScreen = () => {
     }, [])
   );
 
-  const filteredOrders = orders.filter((item) => {
-    if (filter === "CANCELLED") return item.status === "CANCELLED";
-    if (filter === "ACTIVE") return item.status !== "CANCELLED";
+  const filteredOrders = orders.filter(order => {
+    const allCancelled =
+      order.items.length > 0 &&
+      order.items.every(item => item.status === "CANCELLED");
+
+    if (filter === "CANCELLED") return allCancelled;
+    if (filter === "ACTIVE") return !allCancelled;
+
     return true;
   });
 
-  /* ================= INVOICE ACTIONS ================= */
+  const renderItem = ({ item }: { item: Order }) => {
+    const orderStatus = getOrderStatus(item.items);
+    const totalQuantity = item.items.reduce(
+      (sum, product) => sum + product.quantity,
+      0
+    );
 
-  const downloadInvoice = async (orderId: string) => {
-    try {
-      const token = await AsyncStorage.getItem("token");
-      await API.get(
-  `/invoice/${orderId}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-
-      Alert.alert("Invoice", "Invoice opened in browser");
-    } catch {
-      Alert.alert("Error", "Failed to download invoice");
-    }
-  };
-
-  const emailInvoice = async (orderId: string) => {
-    try {
-      const token = await AsyncStorage.getItem("token");
-      await API.post(
-  `/invoice/${orderId}/email`,
-        {},
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-
-      Alert.alert("Success", "Invoice sent to your email");
-    } catch {
-      Alert.alert("Error", "Failed to email invoice");
-    }
-  };
-
-  /* ================= RENDER ITEM ================= */
-
-  const renderItem = ({ item }: any) => {
-    const isCancelled = item.status === "CANCELLED";
-
-    // ✅ FINAL PRICE — NO AUTO DISCOUNT
-    const totalPrice =
-      item.totalAmount ?? item.price * item.quantity;
+    const isCancelled = orderStatus === "CANCELLED";
 
     return (
       <TouchableOpacity
-        style={[
-          styles.card,
-          isCancelled && styles.cancelledCard,
-        ]}
+        style={[styles.card, isCancelled && styles.cancelledCard]}
+        activeOpacity={0.88}
         onPress={() =>
           navigation.navigate("UserOrderDetail", {
             order: item,
           })
         }
-        activeOpacity={0.88}
       >
-        {/* PRICE + STATUS */}
         <View style={styles.rowBetween}>
-          <Text style={styles.price}>₹ {totalPrice}</Text>
+          <Text style={styles.orderTitle}>
+            Order #{item.orderId.slice(-8).toUpperCase()}
+          </Text>
 
           <View
             style={[
-              styles.statusBadge,
-              getStatusStyle(item.status),
+              styles.paymentBadge,
+              getPaymentStyle(item.paymentStatus),
             ]}
           >
-            <Text style={styles.statusText}>
-              {getStatusText(item.status)}
+            <Text style={styles.paymentText}>
+              {getPaymentLabel(item.paymentStatus)}
             </Text>
           </View>
         </View>
 
-        <Text style={styles.qtyText}>
-          Qty: {item.quantity}
-        </Text>
-
-        <Text style={styles.offerInfo}>
-          Best price applied (offers if any)
+        <Text style={styles.productCount}>
+          {item.items.length} product(s) · {totalQuantity} item(s)
         </Text>
 
         <View style={styles.divider} />
 
-        <Text style={styles.date}>
-          Ordered on {formatOrderDate(item.createdAt)} •{" "}
-          {formatOrderTime(item.createdAt)}
-        </Text>
+        {item.items.map(product => (
+          <View key={product.orderItemId} style={styles.productRow}>
+            <View style={styles.productInfo}>
+              <Text style={styles.productName}>{product.title}</Text>
+              <Text style={styles.productSub}>
+                Qty: {product.quantity}
+              </Text>
+            </View>
 
-        {/* 🌸 INVOICE ACTIONS */}
-        {item.status === "DELIVERED" && (
-          <View style={styles.invoiceRow}>
-            <TouchableOpacity
-              style={styles.invoiceBtn}
-              onPress={() => downloadInvoice(item.orderItemId)}
-            >
-              <Icon name="download-outline" size={16} />
-              <Text style={styles.invoiceText}>Invoice</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.invoiceBtn}
-              onPress={() => emailInvoice(item.orderItemId)}
-            >
-              <Icon name="mail-outline" size={16} />
-              <Text style={styles.invoiceText}>Email</Text>
-            </TouchableOpacity>
+            <Text style={styles.productPrice}>
+              ₹{product.price * product.quantity}
+            </Text>
           </View>
-        )}
+        ))}
+
+        <View style={styles.divider} />
+
+        <View style={styles.rowBetween}>
+          <Text style={styles.secondaryText}>Order status</Text>
+          <Text style={styles.orderStatus}>{orderStatus}</Text>
+        </View>
+
+        <View style={styles.rowBetween}>
+          <Text style={styles.secondaryText}>Payment method</Text>
+          <Text style={styles.paymentMethod}>
+            {item.paymentMethod || "Not available"}
+          </Text>
+        </View>
+
+        <View style={styles.rowBetween}>
+          <Text style={styles.secondaryText}>Order date</Text>
+          <Text style={styles.date}>
+            {formatDate(item.createdAt)} · {formatTime(item.createdAt)}
+          </Text>
+        </View>
+
+        <View style={styles.totalRow}>
+          <Text style={styles.totalLabel}>
+            {item.paymentStatus === "SUCCESS"
+              ? "Total Paid"
+              : "Order Total"}
+          </Text>
+
+          <Text style={styles.totalPrice}>
+            ₹{item.orderTotal ?? 0}
+          </Text>
+        </View>
 
         <Text style={styles.tapHint}>
           Tap to view order details →
@@ -214,8 +290,6 @@ const UserOrdersScreen = () => {
       </TouchableOpacity>
     );
   };
-
-  /* ================= LOADING ================= */
 
   if (loading) {
     return (
@@ -225,13 +299,10 @@ const UserOrdersScreen = () => {
     );
   }
 
-  /* ================= UI ================= */
-
   return (
     <View style={styles.container}>
-      {/* FILTERS */}
       <View style={styles.filterRow}>
-        {["ALL", "ACTIVE", "CANCELLED"].map((f) => (
+        {["ALL", "ACTIVE", "CANCELLED"].map(f => (
           <TouchableOpacity
             key={f}
             style={[
@@ -243,8 +314,7 @@ const UserOrdersScreen = () => {
             <Text
               style={[
                 styles.filterText,
-                filter === f &&
-                  styles.activeFilterText,
+                filter === f && styles.activeFilterText,
               ]}
             >
               {f === "ALL"
@@ -259,8 +329,9 @@ const UserOrdersScreen = () => {
 
       <FlatList
         data={filteredOrders}
-        keyExtractor={(item) => item.orderItemId}
+        keyExtractor={item => item.orderId}
         renderItem={renderItem}
+        showsVerticalScrollIndicator={false}
         ListEmptyComponent={
           <Text style={styles.empty}>
             You haven’t placed any orders yet 💖
@@ -273,21 +344,17 @@ const UserOrdersScreen = () => {
 
 export default UserOrdersScreen;
 
-/* ================= STYLES ================= */
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 12,
-    backgroundColor: "#FFF1F2", // 🌸 soft pink
+    backgroundColor: "#FFF1F2",
   },
-
   center: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
   },
-
   card: {
     backgroundColor: "#fff",
     padding: 16,
@@ -295,108 +362,117 @@ const styles = StyleSheet.create({
     marginBottom: 14,
     elevation: 4,
   },
-
   cancelledCard: {
-    opacity: 0.55,
+    opacity: 0.65,
   },
-
   rowBetween: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    marginVertical: 4,
   },
-
-  price: {
-    fontSize: 20,
+  orderTitle: {
+    fontSize: 16,
     fontWeight: "bold",
     color: "#111827",
   },
-
-  qtyText: {
-    marginTop: 6,
-    fontSize: 13,
-    color: "#374151",
-  },
-
-  offerInfo: {
-    marginTop: 6,
+  productCount: {
+    marginTop: 7,
     fontSize: 12,
-    color: "#EC4899", // 💖
-    fontWeight: "600",
+    color: "#6B7280",
   },
-
   divider: {
     height: 1,
     backgroundColor: "#F3F4F6",
     marginVertical: 12,
   },
-
-  date: {
+  productRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginVertical: 5,
+  },
+  productInfo: {
+    flex: 1,
+  },
+  productName: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#111827",
+  },
+  productSub: {
+    fontSize: 12,
+    color: "#6B7280",
+    marginTop: 3,
+  },
+  productPrice: {
+    fontWeight: "600",
+    color: "#374151",
+  },
+  paymentBadge: {
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 15,
+  },
+  paymentSuccess: {
+    backgroundColor: "#DCFCE7",
+  },
+  paymentPending: {
+    backgroundColor: "#FEF3C7",
+  },
+  paymentFailed: {
+    backgroundColor: "#FEE2E2",
+  },
+  paymentDefault: {
+    backgroundColor: "#E5E7EB",
+  },
+  paymentText: {
+    fontSize: 10,
+    fontWeight: "bold",
+    color: "#374151",
+  },
+  secondaryText: {
     fontSize: 12,
     color: "#6B7280",
   },
-
+  orderStatus: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#374151",
+  },
+  paymentMethod: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#374151",
+  },
+  date: {
+    fontSize: 12,
+    color: "#374151",
+  },
+  totalRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 10,
+  },
+  totalLabel: {
+    fontSize: 15,
+    fontWeight: "bold",
+    color: "#111827",
+  },
+  totalPrice: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#9D174D",
+  },
   tapHint: {
-    marginTop: 8,
+    marginTop: 12,
     fontSize: 12,
     color: "#9CA3AF",
   },
-
-  invoiceRow: {
-    flexDirection: "row",
-    marginTop: 12,
-  },
-
-  invoiceBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginRight: 12,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    backgroundColor: "#FCE7F3",
-  },
-
-  invoiceText: {
-    marginLeft: 6,
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#9D174D",
-  },
-
-  statusBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: 20,
-  },
-
-  statusText: {
-    fontSize: 12,
-    fontWeight: "bold",
-    color: "#fff",
-  },
-
-  statusPlaced: {
-    backgroundColor: "#EC4899",
-  },
-
-  statusShipped: {
-    backgroundColor: "#F59E0B",
-  },
-
-  statusCancelled: {
-    backgroundColor: "#EF4444",
-  },
-
-  statusDefault: {
-    backgroundColor: "#9CA3AF",
-  },
-
   filterRow: {
     flexDirection: "row",
     marginBottom: 12,
   },
-
   filterBtn: {
     flex: 1,
     marginHorizontal: 4,
@@ -405,20 +481,16 @@ const styles = StyleSheet.create({
     backgroundColor: "#FCE7F3",
     alignItems: "center",
   },
-
   activeFilter: {
     backgroundColor: "#EC4899",
   },
-
   filterText: {
     fontWeight: "bold",
     color: "#9D174D",
   },
-
   activeFilterText: {
     color: "#fff",
   },
-
   empty: {
     textAlign: "center",
     marginTop: 50,

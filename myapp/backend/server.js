@@ -28,6 +28,11 @@ const replyRoutes = require("./routes/replyRoutes");
 const doctorRoutes = require("./routes/doctorRoutes");
 const doctorAuthRoutes = require("./routes/doctorAuthRoutes");
 const doctorReviewRoutes = require("./routes/doctorReviewRoutes");
+const doctorHospitalRoutes = require("./routes/doctor.hospital.routes");
+const doctorAssistantRoutes = require("./routes/doctor.assistant.routes");
+const assistantRoutes = require("./routes/assistant.routes");
+const adminHospitalRoutes = require("./routes/admin.hospital.routes");
+const adminDoctorHospitalRoutes = require("./routes/admin.doctor-hospital.routes");
 const chatRoutes = require("./routes/chatRoutes");
 const adminAuthRoutes = require("./routes/admin.auth.routes");
 const adminEarningsRoutes = require("./routes/admin.earnings.routes");
@@ -99,7 +104,13 @@ app.use(
   "/api/doctors/availability",
   require("./routes/user.doctor.availability.routes")
 );
+app.use("/api/doctor-assistants", doctorAssistantRoutes);
+app.use("/api/assistant", assistantRoutes);
 app.use("/api/doctor-reviews", doctorReviewRoutes);
+app.use("/api/doctor-hospitals", doctorHospitalRoutes);
+app.use("/api/admin/hospitals", adminHospitalRoutes);
+app.use("/api/admin/doctor-hospitals", adminDoctorHospitalRoutes);
+
 
 /* ===== SHOP & SELLER ===== */
 app.use("/api/shop", require("./routes/shop.user.routes"));
@@ -108,6 +119,7 @@ app.use("/api/seller/products", require("./routes/seller.product.routes"));
 app.use("/api/seller/orders", require("./routes/seller.order.routes"));
 app.use("/api/seller/earnings", require("./routes/seller.earnings.routes"));
 app.use("/api/orders", require("./routes/user.order.routes"));
+app.use("/api/shop/payment", require("./routes/shop.payment.routes"));
 
 /* ===== UPLOAD & INVOICE ===== */
 app.use("/api/upload", require("./routes/upload.routes"));

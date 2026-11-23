@@ -39,6 +39,8 @@ import AdminSessionsPage from "./pages/AdminSessionsPage";
 import AdminPermissionsPage from "./pages/AdminPermissionsPage";
 import AdminSecurityPage from "./pages/AdminSecurityPage";
 import AdminCommandCenter from "./pages/AdminCommandCenter";
+import AdminHospitalsPage from "./pages/AdminHospitalsPage";
+import AdminDoctorHospitalApprovalsPage from "./pages/AdminDoctorHospitalApprovalsPage";
 
 export default function App() {
 return ( <BrowserRouter> <Routes>
@@ -141,6 +143,22 @@ return ( <BrowserRouter> <Routes>
                   </AdminProtectedRoute>
                 }
               />
+              <Route
+  path="/hospitals"
+  element={
+    <AdminProtectedRoute allowedRoles={["SUPER_ADMIN", "SUPPORT_ADMIN"]}>
+      <AdminHospitalsPage />
+    </AdminProtectedRoute>
+  }
+/>
+<Route
+  path="/doctor-hospital-approvals"
+  element={
+    <AdminProtectedRoute allowedRoles={["SUPER_ADMIN", "SUPPORT_ADMIN"]}>
+      <AdminDoctorHospitalApprovalsPage />
+    </AdminProtectedRoute>
+  }
+/>
 
               {/* GST */}
               <Route

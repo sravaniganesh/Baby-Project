@@ -1,3 +1,4 @@
+
 const mongoose = require("mongoose");
 
 const doctorSchema = new mongoose.Schema(
@@ -36,13 +37,16 @@ const doctorSchema = new mongoose.Schema(
       required: true,
     },
 
-    hospital: {
-      type: String,
-      required: true,
-    },
+    // Preserved for compatibility with existing records and APIs.
+    // Hospital relationships will be handled separately.
+   hospital: {
+  type: String,
+  default: "",
+},
 
     city: {
       type: String,
+      required: true,
       trim: true,
     },
 
@@ -59,7 +63,7 @@ const doctorSchema = new mongoose.Schema(
     availability: {
       type: String,
       enum: ["online", "offline", "busy"],
-      default: "offline",
+      default: "online",
     },
 
     consultationFee: {
@@ -67,10 +71,7 @@ const doctorSchema = new mongoose.Schema(
       default: 0,
     },
 
-    /* ===============================
-       🆕 DOCTOR PRICING
-    =============================== */
-
+    // Doctor pricing
     chatPrice: {
       type: Number,
       default: 0,
@@ -89,35 +90,34 @@ const doctorSchema = new mongoose.Schema(
       min: 1,
     },
 
-    /* ===============================
-       🆕 ADMIN OVERRIDE (NEW)
-    =============================== */
-
+    // Admin pricing overrides
     adminOverride: {
       chatPrice: {
         type: Number,
         default: null,
       },
+
       chatDuration: {
         type: Number,
         default: null,
       },
+
       consultationFee: {
         type: Number,
         default: null,
       },
+
       consultationDuration: {
         type: Number,
         default: null,
       },
+
       hospitalConsultationType: {
         type: String,
         enum: ["free", "paid"],
         default: null,
       },
     },
-
-    /* =============================== */
 
     availabilitySlots: [
       {
@@ -142,10 +142,7 @@ const doctorSchema = new mongoose.Schema(
       default: "",
     },
 
-    /* ===============================
-       PRODUCTION ADDITIONS
-    =============================== */
-
+    // Production fields
     phone: {
       type: String,
       unique: true,
@@ -160,27 +157,15 @@ const doctorSchema = new mongoose.Schema(
       lowercase: true,
       trim: true,
     },
+        // Push notification tokens for multiple devices
+    fcmTokens: {
+      type: [String],
+      default: [],
+    },
 
     isActive: {
       type: Boolean,
       default: true,
-    },
-
-    isVerified: {
-      type: Boolean,
-      default: false,
-    },
-
-    city: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-
-    availability: {
-      type: String,
-      enum: ["online", "offline", "busy"],
-      default: "online",
     },
 
     isVerified: {

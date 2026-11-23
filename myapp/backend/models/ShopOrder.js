@@ -1,6 +1,11 @@
+
 const mongoose = require("mongoose");
 
 const orderItemSchema = new mongoose.Schema({
+  cartItemId: {
+  type: mongoose.Schema.Types.ObjectId,
+  default: null,
+},
   productId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "ShopProduct",
@@ -20,12 +25,13 @@ const orderItemSchema = new mongoose.Schema({
   status: {
     type: String,
     enum: [
+      "PENDING_PAYMENT",
       "PLACED",
       "ACCEPTED",
       "SHIPPED",
       "DELIVERED",
       "CANCELLED",
-      "REFUNDED"
+      "REFUNDED",
     ],
     default: "PLACED",
   },
@@ -137,24 +143,108 @@ const shopOrderSchema = new mongoose.Schema({
 
   items: [orderItemSchema],
 
+  /* ===============================
+     💳 CUSTOMER PAYMENT DATA
+  =============================== */
+
+  paymentStatus: {
+    type: String,
+    enum: [
+      "NOT_REQUIRED",
+      "PENDING",
+      "SUCCESS",
+      "FAILED",
+      "CANCELLED",
+      "REFUNDED",
+    ],
+    default: "NOT_REQUIRED",
+  },
+
+  paymentMethod: {
+    type: String,
+    enum: ["SIMULATOR", "ONLINE"],
+    default: null,
+  },
+
+  paymentReference: {
+    type: String,
+    default: null,
+  },
+
+  paidAt: {
+    type: Date,
+    default: null,
+  },
+
+  /* ===============================
+     💵 ORDER PRICING BREAKDOWN
+     ADDITIVE FIELDS
+  =============================== */
+
+  // Product subtotal after discounts, before delivery and platform fee.
+  itemsSubtotal: {
+    type: Number,
+    default: 0,
+    min: 0,
+  },
+
+  discountAmount: {
+    type: Number,
+    default: 0,
+    min: 0,
+  },
+
+  // Delivery fee charged to the customer.
+  customerDeliveryCharge: {
+    type: Number,
+    default: 0,
+    min: 0,
+  },
+
+  // Customer-facing platform fee.
+  platformFee: {
+    type: Number,
+    default: 5,
+    min: 0,
+  },
+
+  // Estimated shipping costs for internal tracking.
+  totalShippingCost: {
+    type: Number,
+    default: 0,
+    min: 0,
+  },
+
+  sellerShippingCost: {
+    type: Number,
+    default: 0,
+    min: 0,
+  },
+
+  /* ===============================
+     💵 ORDER TOTAL
+  =============================== */
+
+  // Total amount payable by the customer.
   totalAmount: {
     type: Number,
     required: true,
   },
+
   isSettled: {
-  type: Boolean,
-  default: false,
-},
+    type: Boolean,
+    default: false,
+  },
 
-settledAt: {
-  type: Date,
-  default: null,
-},
-paidToSellerAt: {
-  type: Date,
-  default: null,
-},
+  settledAt: {
+    type: Date,
+    default: null,
+  },
 
+  paidToSellerAt: {
+    type: Date,
+    default: null,
+  },
 
   createdAt: {
     type: Date,

@@ -112,6 +112,10 @@ const userSchema = new mongoose.Schema(
       premium: { type: Boolean, default: true },
       admin: { type: Boolean, default: true },
     },
+    fcmTokens: {
+  type: [String],
+  default: [],
+},
 
     /* ===============================
        SMART NOTIFICATION ADDITIONS

@@ -120,25 +120,34 @@ const PlaceOrderScreen = () => {
         return;
       }
 
-      await API.post(
+     const response = await API.post(
   `/shop/order/place`,
-        {
-          // 🆕 ADDITIVE FIELDS (BACKEND CAN USE LATER)
-          sellerAmount:
-            sellerAmountFromRoute ||
-            summary?.payable ||
-            0,
+  {
+    sellerAmount:
+      sellerAmountFromRoute ||
+      summary?.payable ||
+      0,
 
-          deliveryAmount: deliveryAmountFromRoute || 0,
+    deliveryAmount: deliveryAmountFromRoute || 0,
 
-          payableAmount: finalPayable,
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
+    payableAmount: finalPayable,
+  },
+  {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  }
+);
+
+const createdOrderId = response.data?.order?._id;
+
+if (!createdOrderId) {
+  throw new Error("Order ID was not returned by the server.");
+}
+
+navigation.replace("ShopOrderConfirmation", {
+  orderId: createdOrderId,
+});
 
       Alert.alert("Success", "Order placed successfully", [
         {

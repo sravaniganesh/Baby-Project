@@ -1,3 +1,4 @@
+
 const express = require("express");
 const router = express.Router();
 const bcrypt = require("bcryptjs");
@@ -5,12 +6,303 @@ const multer = require("multer");
 const path = require("path");
 
 const Doctor = require("../models/Doctor");
+const DoctorHospital = require("../models/DoctorHospital");
+const Hospital = require("../models/Hospital");
+const DoctorAvailability = require("../models/DoctorAvailability");
+const Consultation = require("../models/Consultation");
+
 const protect = require("../middleware/authMiddleware");
 const allowRoles = require("../middleware/roleMiddleware");
+
+
+/* =========================================
+   GET ACTIVE HOSPITALS
+========================================= */
+
+router.get("/hospitals", protect, async (req, res) => {
+  try {
+    const { city, search } = req.query;
+
+    const filter = {
+      isActive: true,
+    };
+
+    if (city) {
+      filter.city = {
+        $regex: String(city).trim(),
+        $options: "i",
+      };
+    }
+
+    if (search) {
+      filter.name = {
+        $regex: String(search).trim(),
+        $options: "i",
+      };
+    }
+
+    const hospitals = await Hospital.find(filter)
+      .select(
+        "name hospitalType address city state country pincode logo description isVerified"
+      )
+      .sort({ name: 1 });
+
+    res.json({
+      success: true,
+      count: hospitals.length,
+      hospitals: hospitals.map((hospital) => ({
+        ...hospital.toObject(),
+        verificationStatus: hospital.isVerified
+          ? "Verified"
+          : "Not yet verified",
+      })),
+    });
+
+  } catch (err) {
+    console.error("HOSPITAL SEARCH ERROR:", err);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to search hospitals",
+    });
+  }
+});
+
+
+/* =========================================
+   SEARCH DOCTORS AND HOSPITALS
+========================================= */
+
+router.get("/search", protect, async (req, res) => {
+  try {
+    const { doctor, hospital, city, specialization } = req.query;
+
+    if (!doctor && !hospital && !city && !specialization) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Please provide doctor, hospital, city or specialization search.",
+      });
+    }
+
+    // Escape special regex characters in user input.
+    const escapeRegex = (value) =>
+      String(value).trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+    const doctorFilter = {
+      isActive: true,
+    };
+
+    if (process.env.NODE_ENV === "production") {
+      doctorFilter.isVerified = true;
+    }
+
+    // Search by doctor name or email.
+    if (doctor) {
+      const searchRegex = escapeRegex(doctor);
+
+      doctorFilter.$or = [
+        { name: { $regex: searchRegex, $options: "i" } },
+        { email: { $regex: searchRegex, $options: "i" } },
+      ];
+    }
+
+    // Search by specialization.
+    if (specialization) {
+      doctorFilter.specialization = {
+        $regex: escapeRegex(specialization),
+        $options: "i",
+      };
+    }
+
+    // -----------------------------------------
+    // 1. FIND HOSPITAL-ASSOCIATED DOCTORS
+    // -----------------------------------------
+
+    const associationFilter = {
+      status: "approved",
+      isActive: true,
+    };
+
+    let matchingHospitals = [];
+
+    if (hospital || city) {
+      const hospitalFilter = {
+        isActive: true,
+      };
+
+      if (hospital) {
+        hospitalFilter.name = {
+          $regex: escapeRegex(hospital),
+          $options: "i",
+        };
+      }
+
+      if (city) {
+        hospitalFilter.city = {
+          $regex: escapeRegex(city),
+          $options: "i",
+        };
+      }
+
+      matchingHospitals = await Hospital.find(hospitalFilter)
+        .select("_id");
+
+      const hospitalIds = matchingHospitals.map(
+        (item) => item._id
+      );
+
+      associationFilter.hospitalId = {
+        $in: hospitalIds,
+      };
+    }
+
+    let associatedResults = [];
+
+    const canSearchAssociations =
+      !(hospital || city) || matchingHospitals.length > 0;
+
+    if (canSearchAssociations) {
+      // Apply doctor name/email and specialization filters
+      // to hospital-associated doctors as well.
+      if (doctor || specialization) {
+        const matchingDoctors = await Doctor.find(doctorFilter)
+          .select("_id");
+
+        const doctorIds = matchingDoctors.map(
+          (item) => item._id
+        );
+
+        associationFilter.doctorId = {
+          $in: doctorIds,
+        };
+      }
+
+      const associations = await DoctorHospital.find(
+        associationFilter
+      )
+        .populate({
+          path: "doctorId",
+          select:
+            "name specialization experience rating avatar profileImage city state isActive isVerified",
+        })
+        .populate({
+          path: "hospitalId",
+          select:
+            "name city state address logo isVerified isActive",
+        })
+        .sort({ createdAt: -1 });
+
+      associatedResults = associations
+        .filter(
+          (item) =>
+            item.doctorId &&
+            item.doctorId.isActive &&
+            item.hospitalId &&
+            item.hospitalId.isActive
+        )
+        .filter(
+          (item) =>
+            process.env.NODE_ENV !== "production" ||
+            item.doctorId.isVerified
+        )
+        .map((item) => ({
+          doctor: item.doctorId,
+          hospital: {
+            _id: item.hospitalId._id,
+            name: item.hospitalId.name,
+            city: item.hospitalId.city,
+            state: item.hospitalId.state,
+            address: item.hospitalId.address,
+            logo: item.hospitalId.logo,
+            isVerified: item.hospitalId.isVerified,
+            verificationStatus: item.hospitalId.isVerified
+              ? "Verified"
+              : "Not yet verified",
+          },
+          consultationFee: item.consultationFee,
+          consultationDuration: item.consultationDuration,
+          bookingMode: item.bookingMode,
+          doctorType: "hospital",
+        }));
+    }
+
+    // -----------------------------------------
+    // 2. FIND INDEPENDENT DOCTORS
+    // -----------------------------------------
+
+    let independentResults = [];
+
+    // Hospital-specific searches should return hospital doctors only.
+    if (!hospital) {
+      const independentFilter = {
+        ...doctorFilter,
+      };
+
+      // For city searches, use the doctor's own city.
+      if (city) {
+        independentFilter.city = {
+          $regex: escapeRegex(city),
+          $options: "i",
+        };
+      }
+
+      // Exclude doctors who have any hospital relationship.
+      const linkedDoctorIds = await DoctorHospital.distinct(
+        "doctorId"
+      );
+
+      independentFilter._id = {
+        $nin: linkedDoctorIds,
+      };
+
+      const independentDoctors = await Doctor.find(
+        independentFilter
+      )
+        .select(
+          "name specialization experience rating avatar profileImage city state consultationFee consultationDuration availability isVerified"
+        )
+        .sort({ name: 1 });
+
+      independentResults = independentDoctors.map((doc) => ({
+        doctor: doc,
+        hospital: null,
+        consultationFee: doc.consultationFee,
+        consultationDuration: doc.consultationDuration,
+        bookingMode: null,
+        doctorType: "independent",
+      }));
+    }
+
+    // -----------------------------------------
+    // 3. COMBINE RESULTS
+    // -----------------------------------------
+
+    const results = [
+      ...associatedResults,
+      ...independentResults,
+    ];
+
+    return res.json({
+      success: true,
+      count: results.length,
+      results,
+    });
+  } catch (err) {
+    console.error("DOCTOR HOSPITAL SEARCH ERROR:", err);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to search doctors and hospitals",
+    });
+  }
+});
+
 
 /* ============================
    DOCTOR REGISTER (SIGNUP)
 ============================ */
+
 router.post("/register", async (req, res) => {
   try {
     const {
@@ -231,8 +523,273 @@ router.post(
   }
 );
 
+/* =========================================
+   GET HOSPITAL-SPECIFIC DOCTOR SLOTS
+========================================= */
+
+router.get(
+  "/hospital/:doctorId/:hospitalId/slots",
+  protect,
+  async (req, res) => {
+    try {
+      const { doctorId, hospitalId } = req.params;
+
+      const fromDate =
+        req.query.from ||
+        new Intl.DateTimeFormat("en-CA", {
+          timeZone: "Asia/Kolkata",
+        }).format(new Date());
+
+      const requestedDays = Number(req.query.days || 14);
+
+      const days = Math.min(
+        Math.max(requestedDays, 1),
+        30
+      );
+
+      // Validate date
+      if (
+        !/^\d{4}-\d{2}-\d{2}$/.test(fromDate) ||
+        Number.isNaN(
+          Date.parse(`${fromDate}T00:00:00.000Z`)
+        ) ||
+        new Date(`${fromDate}T00:00:00.000Z`)
+          .toISOString()
+          .slice(0, 10) !== fromDate
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid start date. Use YYYY-MM-DD.",
+        });
+      }
+
+      if (!Number.isInteger(requestedDays) || requestedDays < 1) {
+        return res.status(400).json({
+          success: false,
+          message: "Days must be a positive whole number.",
+        });
+      }
+
+      // Verify approved doctor-hospital association
+      const doctorHospital = await DoctorHospital.findOne({
+        doctorId,
+        hospitalId,
+        status: "approved",
+        isActive: true,
+      });
+
+      if (!doctorHospital) {
+        return res.status(404).json({
+          success: false,
+          message: "Doctor is not approved at this hospital.",
+        });
+      }
+
+      // Verify hospital
+      const hospitalRecord = await Hospital.findOne({
+        _id: hospitalId,
+        isActive: true,
+      }).select("name city state");
+
+      if (!hospitalRecord) {
+        return res.status(404).json({
+          success: false,
+          message: "Hospital not found or inactive.",
+        });
+      }
+
+      // Verify doctor
+      const doctor = await Doctor.findOne({
+        _id: doctorId,
+        isActive: true,
+        ...(process.env.NODE_ENV === "production"
+          ? { isVerified: true }
+          : {}),
+      }).select("name specialization experience");
+
+      if (!doctor) {
+        return res.status(404).json({
+          success: false,
+          message: "Doctor not found or inactive.",
+        });
+      }
+
+      // Fetch schedules only for the selected hospital
+      const schedules = await DoctorAvailability.find({
+        doctorId,
+        hospitalId,
+        isActive: true,
+      });
+
+      const slots = [];
+      const now = new Date();
+
+      for (let i = 0; i < days; i++) {
+        const currentDate = new Date(
+          `${fromDate}T00:00:00.000Z`
+        );
+
+        currentDate.setUTCDate(
+          currentDate.getUTCDate() + i
+        );
+
+        const date = currentDate.toISOString().slice(0, 10);
+        const dayOfWeek = currentDate.getUTCDay();
+
+        const daySchedules = schedules.filter(
+          (schedule) => schedule.dayOfWeek === dayOfWeek
+        );
+
+        if (!daySchedules.length) continue;
+
+        // Calculate India-local date boundaries
+        const dayStart = new Date(
+          `${date}T00:00:00+05:30`
+        );
+
+        const nextDay = new Date(dayStart);
+        nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+
+        // Pending, confirmed and ongoing appointments block slots
+        const bookedAppointments = await Consultation.find({
+          doctorId,
+          hospitalId,
+          consultationType: "hospital",
+          scheduledAt: {
+            $gte: dayStart,
+            $lt: nextDay,
+          },
+          status: {
+            $in: [
+              "REQUESTED",
+              "CONFIRMED",
+              "IN_PROGRESS",
+            ],
+          },
+        }).select("slotTime");
+
+        const bookedTimes = new Set(
+          bookedAppointments.map((appointment) => appointment.slotTime)
+        );
+
+        for (const schedule of daySchedules) {
+          const timePattern = /^([01]\d|2[0-3]):([0-5]\d)$/;
+
+          if (
+            !timePattern.test(schedule.startTime) ||
+            !timePattern.test(schedule.endTime)
+          ) {
+            continue;
+          }
+
+          const [startHour, startMinute] =
+            schedule.startTime.split(":").map(Number);
+
+          const [endHour, endMinute] =
+            schedule.endTime.split(":").map(Number);
+
+          const startMinutes =
+            startHour * 60 + startMinute;
+
+          const endMinutes =
+            endHour * 60 + endMinute;
+
+          const duration = schedule.slotDuration || 30;
+
+          if (
+            !Number.isInteger(duration) ||
+            duration <= 0 ||
+            endMinutes <= startMinutes
+          ) {
+            continue;
+          }
+
+          for (
+            let minutes = startMinutes;
+            minutes + duration <= endMinutes;
+            minutes += duration
+          ) {
+            const hour = Math.floor(minutes / 60);
+            const minute = minutes % 60;
+
+            const time =
+              `${String(hour).padStart(2, "0")}:` +
+              `${String(minute).padStart(2, "0")}`;
+
+            const scheduledAt = new Date(
+              `${date}T${time}:00+05:30`
+            );
+
+            if (
+              scheduledAt <= now ||
+              bookedTimes.has(time)
+            ) {
+              continue;
+            }
+
+            // Avoid duplicate slots from overlapping schedules
+            const alreadyExists = slots.some(
+              (slot) =>
+                slot.date === date &&
+                slot.time === time
+            );
+
+            if (!alreadyExists) {
+              slots.push({
+                date,
+                time,
+                scheduledAt,
+              });
+            }
+          }
+        }
+      }
+
+      slots.sort(
+        (a, b) =>
+          new Date(a.scheduledAt) - new Date(b.scheduledAt)
+      );
+
+      res.json({
+        success: true,
+
+        doctor: {
+          _id: doctor._id,
+          name: doctor.name,
+          specialization: doctor.specialization,
+          experience: doctor.experience,
+        },
+
+        hospital: {
+          _id: hospitalRecord._id,
+          name: hospitalRecord.name,
+          city: hospitalRecord.city,
+          state: hospitalRecord.state,
+        },
+
+        consultationFee: doctorHospital.consultationFee,
+        consultationDuration:
+          doctorHospital.consultationDuration,
+
+        bookingMode: doctorHospital.bookingMode,
+
+        slots,
+      });
+
+    } catch (err) {
+      console.error("HOSPITAL DOCTOR SLOTS ERROR:", err);
+
+      res.status(500).json({
+        success: false,
+        message: "Failed to fetch hospital appointment slots.",
+      });
+    }
+  }
+);
+
 /* ============================
-   GET DOCTOR SLOTS
+   GET LEGACY DOCTOR SLOTS
+   KEEP FOR EXISTING COMPATIBILITY
 ============================ */
 router.get("/:doctorId/slots", protect, async (req, res) => {
   try {
@@ -266,7 +823,7 @@ router.get("/:doctorId/slots", protect, async (req, res) => {
 });
 
 /* ============================
-   ✅ FIXED UPDATE PRICING
+   FIXED UPDATE PRICING
 ============================ */
 router.put(
   "/update-pricing",

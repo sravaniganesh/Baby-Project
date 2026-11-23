@@ -222,15 +222,16 @@ const UserTabs = () => {
       />
 
       <Tab.Screen
-        name="Profile"
-        component={ProfileStack}
-        options={{
-          headerShown: false,
-          tabBarIcon: ({ focused }) => (
-            <TabIcon icon="account-outline" focused={focused} />
-          ),
-        }}
-      />
+  name="Profile"
+  component={ProfileStack}
+  options={{
+    headerShown: false,
+    popToTopOnBlur: true,
+    tabBarIcon: ({ focused }) => (
+      <TabIcon icon="account-outline" focused={focused} />
+    ),
+  }}
+/>
 
     </Tab.Navigator>
   );

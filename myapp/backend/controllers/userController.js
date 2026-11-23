@@ -73,30 +73,53 @@ delete updates.usernameUpdatedAt;
 };
 
 
+
 /* ===============================
-   SAVE FCM TOKEN
-   =============================== */
-   exports.saveFcmToken = async (req, res) => {
+   SAVE FCM TOKEN (MULTI-DEVICE)
+=============================== */
+exports.saveFcmToken = async (req, res) => {
   try {
     const { fcmToken } = req.body;
 
-    if (!fcmToken) {
-      return res.status(400).json({ message: "FCM token required" });
+    if (!fcmToken || typeof fcmToken !== "string") {
+      return res.status(400).json({
+        message: "Valid FCM token required",
+      });
     }
 
-    await User.findByIdAndUpdate(
+    const user = await User.findByIdAndUpdate(
       req.user._id,
-      { fcmToken },
+      {
+        $set: {
+          fcmToken, // Legacy compatibility
+        },
+        $addToSet: {
+          fcmTokens: fcmToken, // Keep multiple device tokens
+        },
+      },
       { new: true }
     );
 
-    res.json({ message: "FCM token saved" });
+    if (!user) {
+      return res.status(404).json({
+        message: "User not found",
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: "FCM token saved successfully",
+    });
 
   } catch (err) {
     console.error("Save FCM error:", err);
-    res.status(500).json({ message: "Failed to save FCM token" });
+
+    return res.status(500).json({
+      message: "Failed to save FCM token",
+    });
   }
 };
+
 /* ===============================
    UPDATE USERNAME (30 DAY RULE)
 ================================ */

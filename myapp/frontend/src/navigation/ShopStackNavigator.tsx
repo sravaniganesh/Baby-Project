@@ -16,6 +16,7 @@ import AddAddressScreen from "../screens/user/AddAddressScreen";
 import SelectAddressScreen from "../screens/user/SelectAddressScreen";
 import PlaceOrderScreen from "../screens/user/PlaceOrderScreen";
 import AddReviewScreen from "../screens/shop/AddReviewScreen";
+import ShopOrderConfirmationScreen from "../screens/shop/ShopOrderConfirmationScreen";
 
 const Stack = createNativeStackNavigator();
 
@@ -110,6 +111,13 @@ const ShopStackNavigator = () => {
   name="AddReview"
   component={AddReviewScreen}
   options={{ title: "Rate Product" }}
+/>
+<Stack.Screen
+  name="ShopOrderConfirmation"
+  component={ShopOrderConfirmationScreen}
+  options={{
+    title: "Order Confirmation",
+  }}
 />
 
       

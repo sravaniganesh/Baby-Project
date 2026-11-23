@@ -10,7 +10,7 @@ import {
 
 import API from "../../config/api";
 
-import { connectSocket, safeJoinRoom } from "../../services/socket";
+import { connectSocket } from "../../services/socket";
 interface StageMessage {
   _id: string;
   stageKey: string;

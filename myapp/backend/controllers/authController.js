@@ -208,7 +208,7 @@ const registerUser = async (req, res) => {
 };
 
 /* =========================================
-   REGISTER DOCTOR (FIXED ONLY HERE)
+   REGISTER DOCTOR
 ========================================= */
 const registerDoctor = async (req, res) => {
   try {
@@ -224,40 +224,70 @@ const registerDoctor = async (req, res) => {
       state,
     } = req.body;
 
-    console.log("REGISTER DOCTOR BODY:", req.body);
-
     if (
       !name ||
       !email ||
       !password ||
       !specialization ||
-      !experience ||
-      !hospital ||
+      experience === undefined ||
+      experience === null ||
+      experience === "" ||
       !city
     ) {
       return res.status(400).json({
-        message: "All required fields including city must be filled",
+        message: "Please fill all required fields",
       });
     }
 
+    if (password.length < 6) {
+      return res.status(400).json({
+        message: "Password must be at least 6 characters",
+      });
+    }
+
+    const experienceValue = Number(experience);
+
+    if (!Number.isFinite(experienceValue) || experienceValue < 0) {
+      return res.status(400).json({
+        message: "Please enter valid experience",
+      });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+
     const emailExists =
-      (await User.findOne({ email })) ||
-      (await Doctor.findOne({ email })) ||
-      (await Seller.findOne({ email }));
+      (await User.findOne({ email: normalizedEmail })) ||
+      (await Doctor.findOne({ email: normalizedEmail })) ||
+      (await Seller.findOne({ email: normalizedEmail }));
 
     if (emailExists) {
-      return res.status(400).json({ message: "Email already registered" });
+      return res.status(400).json({
+        message: "Email already registered",
+      });
+    }
+
+    if (phone) {
+      const phoneExists =
+        (await User.findOne({ phone })) ||
+        (await Doctor.findOne({ phone })) ||
+        (await Seller.findOne({ phone }));
+
+      if (phoneExists) {
+        return res.status(400).json({
+          message: "Phone already registered",
+        });
+      }
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const doctor = await Doctor.create({
-      name,
-      email,
+      name: name.trim(),
+      email: normalizedEmail,
       password: hashedPassword,
       specialization,
-      experience,
-      hospital,
+      experience: experienceValue,
+      hospital: hospital || "",
       phone,
       city,
       state,
@@ -270,8 +300,9 @@ const registerDoctor = async (req, res) => {
       { expiresIn: "30d" }
     );
 
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
+      message: "Doctor registered successfully",
       token,
       role: doctor.role,
       user: doctor,
@@ -279,7 +310,10 @@ const registerDoctor = async (req, res) => {
 
   } catch (error) {
     console.error("Register doctor error:", error);
-    res.status(500).json({ message: "Server error" });
+
+    return res.status(500).json({
+      message: "Server error",
+    });
   }
 };
 

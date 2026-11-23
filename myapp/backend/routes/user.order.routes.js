@@ -7,6 +7,7 @@ const notificationService = require("../services/notificationService");
 const notifyAdmins = require("../utils/adminNotifier");
 const emitAdminEvent = require("../utils/adminEventEmitter");
 
+
 // ================================
 // 👤 USER — MY ORDERS
 // GET /api/orders/my
@@ -15,15 +16,16 @@ router.get("/my", authMiddleware, async (req, res) => {
   try {
     const userId = req.user.id;
 
-    const orders = await ShopOrder.find({ userId }).sort({
-      createdAt: -1,
-    });
+    const orders = await ShopOrder.find({ userId })
+      .sort({ createdAt: -1 })
+      .lean();
 
     const orderItems = [];
 
     for (const order of orders) {
-      for (const item of order.items) {
+      for (const item of order.items || []) {
         orderItems.push({
+          // Existing fields — preserved
           orderItemId: item._id,
           productId: item.productId,
           title: item.title,
@@ -32,16 +34,32 @@ router.get("/my", authMiddleware, async (req, res) => {
           quantity: item.quantity,
           status: item.status,
           createdAt: order.createdAt,
+
+          // Parent order details — added
+          orderId: order._id,
+          paymentStatus: order.paymentStatus,
+          paymentMethod: order.paymentMethod,
+          paymentReference: order.paymentReference,
+          paidAt: order.paidAt,
+          orderTotal: order.totalAmount,
+
+          // Additional pricing details
+          itemsSubtotal: order.itemsSubtotal,
+          discountAmount: order.discountAmount,
+          customerDeliveryCharge: order.customerDeliveryCharge,
+          platformFee: order.platformFee,
         });
       }
     }
-
+console.log("MY ORDERS API RESPONSE:");
+console.log(JSON.stringify(orderItems, null, 2));
     res.json(orderItems);
   } catch (err) {
     console.error("User orders error:", err);
     res.status(500).json({ message: "Failed to load orders" });
   }
 });
+
 
 // ================================
 // ❌ USER — CANCEL / REFUND ORDER ITEM
