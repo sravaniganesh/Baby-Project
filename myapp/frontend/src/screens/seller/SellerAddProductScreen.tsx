@@ -10,6 +10,7 @@ import {
   Alert,
   Image,
   ActivityIndicator,
+  Platform,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import API from "../../config/api";
@@ -92,6 +93,11 @@ const SellerAddProductScreen = ({ navigation }: any) => {
 
   /* ================= IMAGE PICK ================= */
   const pickImage = () => {
+    if (Platform.OS === "web") {
+      openGallery();
+      return;
+    }
+
     Alert.alert("Add Image", "Choose source", [
       { text: "Camera", onPress: openCamera },
       { text: "Gallery", onPress: openGallery },
@@ -114,21 +120,35 @@ const SellerAddProductScreen = ({ navigation }: any) => {
       const token = await AsyncStorage.getItem("token");
 
       const form = new FormData();
+      const asset = res.assets[0];
 
-      form.append("image", {
-        uri: res.assets[0].uri,
-        name: "product.jpg",
-        type: "image/jpeg",
-      } as any);
+      if (Platform.OS === "web") {
+        if (!(asset.file instanceof Blob)) {
+          throw new Error("The selected image file is unavailable.");
+        }
+
+        form.append("image", asset.file, asset.fileName || "product.jpg");
+      } else {
+        form.append("image", {
+          uri: asset.uri,
+          name: "product.jpg",
+          type: "image/jpeg",
+        } as any);
+      }
+
+      const headers: Record<string, string> = {
+        Authorization: `Bearer ${token}`,
+      };
+
+      if (Platform.OS !== "web") {
+        headers["Content-Type"] = "multipart/form-data";
+      }
 
       const upload = await API.post(
         "/seller/products/upload-image",
         form,
         {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "multipart/form-data",
-          },
+          headers,
         }
       );
 

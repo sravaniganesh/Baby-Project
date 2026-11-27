@@ -1,9 +1,16 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+} from "react";
 import {
   getNotifications,
   getUnreadCount,
 } from "../services/notificationService";
 import { connectSocket } from "../services/socket";
+import { useAuth } from "./AuthContext";
 
 type NotificationContextType = {
   notifications: any[];
@@ -21,36 +28,43 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({
 }) => {
   const [notifications, setNotifications] = useState<any[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const { token } = useAuth();
 
-  const loadNotifications = async () => {
+  const loadNotifications = useCallback(async () => {
     try {
       const data = await getNotifications();
       setNotifications(data);
     } catch (err) {
       console.log("Notification fetch error", err);
     }
-  };
+  }, []);
 
-  const loadUnread = async () => {
+  const loadUnread = useCallback(async () => {
     try {
       const count = await getUnreadCount();
       setUnreadCount(count);
     } catch (err) {
       console.log("Unread count error", err);
     }
-  };
+  }, []);
 
-  const refreshNotifications = async () => {
+  const refreshNotifications = useCallback(async () => {
     await loadNotifications();
     await loadUnread();
-  };
+  }, [loadNotifications, loadUnread]);
 
-  const refreshUnread = async () => {
+  const refreshUnread = useCallback(async () => {
     await loadUnread();
-  };
+  }, [loadUnread]);
 
   useEffect(() => {
-    refreshNotifications();
+    if (!token) {
+      setNotifications([]);
+      setUnreadCount(0);
+      return;
+    }
+
+    void refreshNotifications();
 
     const socket = connectSocket();
 
@@ -64,7 +78,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({
     return () => {
       socket.off("new_notification");
     };
-  }, []);
+  }, [refreshNotifications, token]);
 
   return (
     <NotificationContext.Provider
